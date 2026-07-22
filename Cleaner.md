@@ -30,6 +30,9 @@ The project favors:
 
 The current working direction includes H.264 output for compatibility, fixed-bitrate testing, AAC stereo, and deliberate scaling tests. Exact canonical settings should be expanded here only after they are confirmed from the existing project evidence.
 
+<img width="1254" height="1254" alt="Media Standardizer v2 0 interface screenshot" src="https://github.com/user-attachments/assets/1798e71d-cecb-406d-bc85-66123f3aa137" />
+
+
 ## Manual Structure to Build
 
 This manual will eventually contain:
