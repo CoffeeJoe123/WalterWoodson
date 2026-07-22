@@ -1,88 +1,163 @@
-# The WoodPile Codex
+# WoodPile Codex
 
-The Codex is the canonical body of project knowledge.
+Version: 2.0
+Status: Current
+Last Updated: 2026-07-22
 
-It records what the WoodPile knows: philosophy, intentions, terminology, standards, evidence, decisions, history, accepted compromises, rejected approaches, and plans that have matured beyond temporary conversation.
+---
 
-It is not the Duty Log and it is not a transcript.
+# Purpose
 
-## How to Use This Document
+The WoodPile Codex is the engineering memory of the WoodPile project.
 
-Before reopening a settled question, read the relevant section and understand why the current decision was made. A familiar convention is not, by itself, new evidence.
+Its purpose is to preserve engineering decisions so future work begins from established knowledge rather than reconstructed conversation.
 
-When a decision changes, preserve the reason for the change. Do not silently overwrite history in a way that makes the present standard appear arbitrary.
+The Codex is authoritative.
 
-## Document Map
+When the project evolves, the Codex evolves with it.
 
-- [About the WoodPile](AboutTheWoodPile.md) — orientation and shared philosophy
-- [Duty Log](DutyLog.md) — active work and next actions
-- [Flywheel](Flywheel.md) — evidence-to-tool improvement cycle
-- [The Cleaner](../Cleaner/Cleaner.md) — media preparation manual
-- [The Wrangler](../Wrangler/Wrangler.md) — organization and metadata manual
-- [Bookie](../Bookie/Bookie.md) — audiobook preparation manual
+---
 
-## Canonical Distinctions
+# Mission
 
-### Charter
+WoodPile exists to preserve media in an accessible, compatible, and intelligent manner so it remains useful long into the future.
 
-[`WALTER_START_HERE.md`](../WALTER_START_HERE.md) defines who Walter is and how he works. It is changed deliberately, not as routine project documentation.
+The objective is not to create the smallest files or achieve the highest benchmark scores.
 
-### Codex
+The objective is to preserve the ability for future people to experience the work with minimal technical barriers.
 
-This document and its eventual linked chapters contain settled project knowledge.
+Technology will change.
 
-### Duty Log
+The preservation objective remains.
 
-[`DutyLog.md`](DutyLog.md) records where work stopped, what remains open, and the next concrete action. It should not become a permanent dumping ground for settled knowledge.
+---
 
-### Tool Manuals
+# The WoodPile Standard
 
-Each tool manual explains the member's purpose, boundaries, controls, implementation, current behavior, and source links.
+The WoodPile Standard represents the project's current engineering decisions.
 
-## Working Principles
+Each standard is established through testing, observation, and practical experience.
 
-### Evidence Over Assumption
+Once adopted, the standard becomes the default implementation.
 
-Separate observation, interpretation, uncertainty, decision, and action. Do not present a plausible reconstruction as established history.
+The standard changes only when new evidence demonstrates a better solution.
 
-### Compatibility and Accessibility
+---
 
-The archive is meant to remain usable. A technically impressive format is not preferable when ordinary clients cannot reliably use it.
+# The Flywheel
 
-### Reliable Quality Over Maximum Quality
+WoodPile is built around a flywheel rather than an expanding collection of user choices.
 
-The target is a result that is consistently good, reasonably sized, compatible, and quick enough to process at collection scale. The project does not pursue invisible gains at disproportionate cost.
+Repeated engineering decisions are made once, deliberately, then encoded into the software.
 
-### Opinionated Tools
+The decision is not removed.
 
-These are not general-purpose applications. Once a standard is established, the tools should embody it and avoid exposing unnecessary controls.
+The need to repeatedly make it is removed.
 
-### Preserve Responsibility Boundaries
+The flywheel is revisited only when new evidence justifies changing the standard.
 
-The Cleaner prepares media. The Wrangler organizes it. Bookie handles audiobooks. New behavior should go to the member whose role actually owns it.
+Novelty alone is not sufficient.
 
-## Current Community
+Stable by default.
 
-### The Cleaner
+Evidence earns change.
 
-The Cleaner is the successor to the former Media Standardizer name. It cleans and prepares media; it does not claim to improve the source.
+---
 
-See [Cleaner Manual](../Cleaner/Cleaner.md).
+# Engineering Philosophy
 
-### The Wrangler
+Compatibility is a cornerstone.
 
-The Wrangler owns naming, metadata, tracks, folders, and organization.
+Accessibility is a cornerstone.
 
-See [Wrangler Manual](../Wrangler/Wrangler.md).
+Optimize for the destination rather than the source.
 
-### Bookie
+Preserve the viewing and listening experience while removing unnecessary excess.
 
-Bookie owns audiobook preparation and organization.
+Do not engineer around incompatibility.
 
-See [Bookie Manual](../Bookie/Bookie.md).
+Prefer standards that naturally avoid it.
 
-## Growth of the Codex
+---
 
-As the project develops, this document may become a table of contents for focused chapters. New documents should be linked explicitly. Walter must not depend on browsing the repository or guessing filenames.
+# Documentation Philosophy
 
-A subject is ready for the Codex when it has become durable enough that future work should rely upon it. Unresolved work stays in the [Duty Log](DutyLog.md).
+The Codex preserves current truth.
+
+It is not intended to preserve obsolete decisions or project history.
+
+When standards change:
+
+* Carry forward everything that remains true.
+* Replace anything that is no longer true.
+* Preserve reasoning only when it helps future engineering.
+* Do not manufacture explanations.
+
+Version history belongs to source control.
+
+The Codex describes the current specification.
+
+---
+
+# Specifications
+
+Each tool owns one authoritative specification.
+
+Examples include:
+
+* Cleaner/Cleaner.md
+* Wrangler/Wrangler.md
+* Bookie/Bookie.md
+
+Specifications describe what the tool currently does.
+
+They are complete replacement documents rather than collections of incremental edits.
+
+---
+
+# Engineering Notes
+
+Implementation discoveries that are likely to save future engineering effort belong in Engineering Notes.
+
+Engineering Notes explain why.
+
+Specifications define what.
+
+Source code comments explain how.
+
+Each kind of knowledge belongs in its natural home.
+
+---
+
+# Walter Woodson
+
+Walter Woodson is the engineering partner and caretaker of the WoodPile project.
+
+Walter does not preserve the project through memory.
+
+Walter preserves the project by maintaining the Codex and implementing its standards.
+
+Walter distinguishes between:
+
+* documented fact,
+* conversation,
+* inference,
+* recommendation.
+
+Walter continues the project rather than rediscovering it.
+
+---
+
+# Project Objective
+
+Every engineering decision should support the same long-term objective:
+
+Enable someone in the future to access and experience preserved media without becoming an expert in obsolete technology.
+
+The preservation succeeds when the technology becomes invisible and the media remains accessible.
+
+The software captures engineering judgment.
+
+The Codex preserves that judgment.
+
+The future inherits both.
