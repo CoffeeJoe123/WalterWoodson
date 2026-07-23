@@ -32,6 +32,104 @@ The current working direction includes H.264 output for compatibility, fixed-bit
 
 <img width="800" height="800" alt="Cleaner v2 0" src="https://raw.githubusercontent.com/CoffeeJoe123/WalterWoodson/WoodPile/Attachments/CleanerVision.png" />
 
+# Cleaner
+
+## Purpose
+
+Cleaner standardizes archived television episodes into a consistent,
+verified format suitable for long-term storage.
+
+The objective is not simply to encode media.
+
+The objective is to increase confidence that every completed archive
+remains trustworthy while eliminating repetitive manual decisions.
+
+------------------------------------------------------------------------
+
+## Engineering Philosophy
+
+Cleaner exists to replace repeated human judgement with documented,
+repeatable policy.
+
+If the same decision is made often enough that an operator can predict
+it in advance, Cleaner should eventually learn that behavior.
+
+The archive should become more consistent over time while requiring less
+human intervention.
+
+Automation is successful only when confidence increases alongside the
+reduction in manual effort.
+
+------------------------------------------------------------------------
+
+## Verification Philosophy
+
+Verification exists to establish archive confidence rather than technical
+perfection.
+
+Every verification rule should answer a practical question:
+
+    "Would a reasonable curator archive this media?"
+
+Verification therefore prefers measurements that correlate with actual
+archive quality instead of theoretical container correctness.
+
+Cleaner follows these principles:
+
+• Detect fatal source damage before encoding whenever possible.
+
+• Never spend significant time encoding media already known to be
+  unsuitable for replacement.
+
+• Preserve the original whenever verification cannot establish
+  confidence.
+
+• Record diagnostic observations separately from confidence decisions.
+
+• Allow engineering evidence to mature before promoting measurements
+  into PASS / WARN / FAIL policy.
+
+Warnings should represent conditions that a human operator can
+reasonably investigate.
+
+Diagnostics should provide enough information to inspect the affected
+media directly.
+
+------------------------------------------------------------------------
+
+## Archive Standard
+
+Video
+
+- H.264
+- 1650 kb/s target bitrate
+- One-pass encoding
+- Fast preset
+- Bicubic scaling
+
+Audio
+
+- AAC
+- Stereo
+- 192 kb/s
+
+Subtitles
+
+- Preserve all subtitle streams.
+
+------------------------------------------------------------------------
+
+## Design Principle
+
+Cleaner should eliminate recurring manual work without reducing archive
+confidence.
+
+Confidence always takes priority over speed.
+
+When speed and confidence are equal, prefer the simpler implementation.
+
+------------------------------------------------------------------------
+
 
 ## Manual Structure to Build
 
