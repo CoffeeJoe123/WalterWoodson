@@ -1,8 +1,8 @@
 # WoodPile Codex
 
-Version: 2.0
-Status: Current
-Last Updated: 2026-07-22
+**Version:** 2.1  
+**Status:** Current  
+**Last Updated:** 2026-07-23
 
 ---
 
@@ -80,6 +80,53 @@ Prefer standards that naturally avoid it.
 
 ---
 
+# Confidence
+
+Confidence is a primary product requirement.
+
+Most preserved media will not be watched again by the curator before long-term storage. A successful encode, remux, or direct-play test therefore does not by itself establish archive integrity.
+
+WoodPile tools must make a reasonable, evidence-based effort to detect localized playback defects that tolerant players may conceal, including continuity gaps, frozen video spans, audio dropouts, and other defects that do not necessarily cause an encoder to abort.
+
+Verification is not intended to prove perfection.
+
+It exists to provide justified confidence that archived media is structurally usable and that known playback defects were not silently carried forward.
+
+---
+
+# Two Gates
+
+Media preparation has two independent questions:
+
+1. **Can the tool process this source?**
+2. **Should the result be accepted into the archive?**
+
+The first is a technical processing question.
+
+The second is an integrity and preservation question.
+
+A source may be technically encodable while still failing the WoodPile confidence standard.
+
+WoodPile tools must not confuse successful processing with successful preservation.
+
+---
+
+# Positive Engineering
+
+WoodPile tools assume success and attempt forward progress.
+
+Whenever something can be corrected safely, correct it.
+
+Whenever something can be standardized safely, standardize it.
+
+Whenever something merely deserves reporting, report it.
+
+Abort only when continuing would produce an untrustworthy archive or violate transaction safety.
+
+When a demonstrable integrity failure is known before expensive processing begins, stop early, report the exact evidence, preserve the source, and continue with the batch.
+
+---
+
 # Documentation Philosophy
 
 The Codex preserves current truth.
@@ -88,10 +135,10 @@ It is not intended to preserve obsolete decisions or project history.
 
 When standards change:
 
-* Carry forward everything that remains true.
-* Replace anything that is no longer true.
-* Preserve reasoning only when it helps future engineering.
-* Do not manufacture explanations.
+- Carry forward everything that remains true.
+- Replace anything that is no longer true.
+- Preserve reasoning only when it helps future engineering.
+- Do not manufacture explanations.
 
 Version history belongs to source control.
 
@@ -105,9 +152,9 @@ Each tool owns one authoritative specification.
 
 Examples include:
 
-* Cleaner/Cleaner.md
-* Wrangler/Wrangler.md
-* Bookie/Bookie.md
+- `Cleaner/Cleaner.md`
+- `Wrangler/Wrangler.md`
+- `Bookie/Bookie.md`
 
 Specifications describe what the tool currently does.
 
@@ -139,10 +186,10 @@ Walter preserves the project by maintaining the Codex and implementing its stand
 
 Walter distinguishes between:
 
-* documented fact,
-* conversation,
-* inference,
-* recommendation.
+- documented fact,
+- conversation,
+- inference,
+- recommendation.
 
 Walter continues the project rather than rediscovering it.
 
@@ -152,7 +199,7 @@ Walter continues the project rather than rediscovering it.
 
 Every engineering decision should support the same long-term objective:
 
-Enable someone in the future to access and experience preserved media without becoming an expert in obsolete technology.
+> Enable someone in the future to access and experience preserved media without becoming an expert in obsolete technology.
 
 The preservation succeeds when the technology becomes invisible and the media remains accessible.
 

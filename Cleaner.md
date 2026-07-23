@@ -1,154 +1,196 @@
 # The Cleaner
 
-The Cleaner prepares media according to the WoodPile's preservation, compatibility, accessibility, and size standards.
+**Status:** Current  
+**Last Updated:** 2026-07-23
 
-It is the successor to the former Media Standardizer name. The new name is deliberate: the tool cleans and prepares material for the archive; it does not claim to improve the source.
+The Cleaner prepares media according to the WoodPile's preservation, compatibility, accessibility, size, and confidence standards.
+
+It is the successor to the former Media Standardizer name.
+
+The new name is deliberate: the tool cleans and prepares material for the archive; it does not claim to improve the source.
+
+---
 
 ## Role
 
-The Cleaner owns media transformation decisions such as:
+The Cleaner owns media transformation and acceptance decisions such as:
 
-- video codec and encoding behavior
-- scaling
-- bitrate strategy
-- audio conversion
-- subtitle retention during conversion
-- verification of the produced media
+- video codec and encoding behavior,
+- scaling,
+- bitrate strategy,
+- audio conversion,
+- subtitle retention during conversion,
+- preflight source-integrity checks,
+- verification of the produced media,
+- batch continuation and failure reporting.
 
 Naming, metadata cleanup, folder construction, and library organization belong primarily to [The Wrangler](../Wrangler/Wrangler.md).
+
+---
+
+## Preservation Objective
+
+The Cleaner is not merely an FFmpeg wrapper.
+
+Its job is not complete when encoding and remuxing succeed.
+
+The Cleaner must make a reasonable, evidence-based effort to determine whether the source and resulting media are trustworthy enough for long-term storage.
+
+A technically playable file may still contain a meaningful playback defect.
+
+A tolerant player may skip over a damaged span, freeze the last video frame while audio continues, or recover after missing packets without displaying an obvious error.
+
+Such behavior does not make the source healthy.
+
+---
+
+## Two Acceptance Gates
+
+Cleaner evaluates two separate questions.
+
+### Processing Gate
+
+Can the source be decoded, encoded, remuxed, and verified technically?
+
+Examples of processing failures include:
+
+- unreadable input,
+- fatal decoder errors,
+- unsupported streams,
+- aborted encoding,
+- remux failure,
+- output verification failure.
+
+### Integrity Gate
+
+Does available evidence support accepting the media into the WoodPile?
+
+Examples of integrity failures include:
+
+- a demonstrated playback continuity hole,
+- a serious timestamp discontinuity correlated with missing or frozen playback,
+- a localized audio or video defect that processing alone would conceal,
+- any condition that permits technical completion but undermines archive confidence.
+
+Successful processing does not override an integrity failure.
+
+---
+
+## Preflight Integrity Analysis
+
+Cleaner performs source-integrity analysis before expensive encoding whenever practical.
+
+If a demonstrated failure is found later in the source, Cleaner may reject the job immediately rather than processing up to that point.
+
+The report must make clear that:
+
+- the defect occurs later in the source,
+- the exact observed time range,
+- encoding was intentionally not started,
+- the original was preserved,
+- the batch will continue.
+
+Preferred operator-facing wording:
+
+> **PREFLIGHT INTEGRITY FAILURE**  
+> A playback continuity defect was detected later in the source.  
+> Location: `HH:MM:SS → HH:MM:SS`  
+> Encoding was not started because the source cannot produce a trustworthy archive under the current WoodPile Standard.
+
+Preflight exists to save processing time without hiding the reason for rejection.
+
+---
+
+## Continuity Policy
+
+Packet continuity is evaluated using DTS whenever available.
+
+Normal H.264 frame reordering can produce small backward timestamp movement without indicating damaged media.
+
+A backward timestamp step alone must not be classified as an integrity failure.
+
+A demonstrated continuity hole is different from normal timestamp reordering.
+
+The distinction must remain explicit in code, logging, tests, and documentation.
+
+Continuity findings should identify:
+
+- affected stream,
+- previous timestamp,
+- next timestamp,
+- size of the gap,
+- location in human-readable time,
+- policy result,
+- whether encoding was skipped.
+
+---
 
 ## Current Direction
 
 The project favors:
 
-- broad playback compatibility
-- dependable quality rather than maximal quality
-- controlled and predictable output size
-- minimal routine choices once testing has established the standard
-- source-first processing
-- unattended batch operation that can be trusted
+- broad playback compatibility,
+- dependable quality rather than maximal quality,
+- controlled and predictable output size,
+- minimal routine choices once testing has established the standard,
+- source-first processing,
+- unattended batch operation that can be trusted,
+- actionable verification rather than generic success messages.
 
-The current working direction includes H.264 output for compatibility, fixed-bitrate testing, AAC stereo, and deliberate scaling tests. Exact canonical settings should be expanded here only after they are confirmed from the existing project evidence.
+The current working direction includes H.264 output for compatibility, fixed-bitrate testing, AAC stereo, deliberate scaling tests, and preflight continuity analysis.
 
-<img width="800" height="800" alt="Cleaner v2 0" src="https://raw.githubusercontent.com/CoffeeJoe123/WalterWoodson/WoodPile/Attachments/CleanerVision.png" />
+Exact canonical encoding settings should be expanded here only after they are confirmed from existing project evidence.
 
-# Cleaner
+---
 
-## Purpose
+## Batch Behavior
 
-Cleaner standardizes archived television episodes into a consistent,
-verified format suitable for long-term storage.
+Cleaner assumes success and attempts every queued file.
 
-The objective is not simply to encode media.
+For each source:
 
-The objective is to increase confidence that every completed archive
-remains trustworthy while eliminating repetitive manual decisions.
+- inspect,
+- perform preflight integrity checks,
+- encode only when the source remains eligible,
+- remux,
+- verify,
+- preserve the original,
+- record the outcome,
+- continue to the next file.
 
-------------------------------------------------------------------------
+One failed source must not terminate the remaining batch unless transaction safety itself is compromised.
 
-## Engineering Philosophy
+---
 
-Cleaner exists to replace repeated human judgement with documented,
-repeatable policy.
+## Reporting
 
-If the same decision is made often enough that an operator can predict
-it in advance, Cleaner should eventually learn that behavior.
+Cleaner must distinguish among:
 
-The archive should become more consistent over time while requiring less
-human intervention.
+### PASS
 
-Automation is successful only when confidence increases alongside the
-reduction in manual effort.
+Processing completed and no evidence currently undermines archive confidence.
 
-------------------------------------------------------------------------
+### WARN
 
-## Verification Philosophy
+An unusual condition was measured, but available evidence does not justify rejection.
 
-Verification exists to establish archive confidence rather than technical
-perfection.
+### INTEGRITY FAIL
 
-Every verification rule should answer a practical question:
+A real playback or preservation defect has been demonstrated, even if the source remains technically playable or encodable.
 
-    "Would a reasonable curator archive this media?"
+### PROCESSING FAIL
 
-Verification therefore prefers measurements that correlate with actual
-archive quality instead of theoretical container correctness.
+The tool could not complete the required technical operation.
 
-Cleaner follows these principles:
+Diagnostics should be specific enough for direct inspection and future engineering.
 
-• Detect fatal source damage before encoding whenever possible.
-
-• Never spend significant time encoding media already known to be
-  unsuitable for replacement.
-
-• Preserve the original whenever verification cannot establish
-  confidence.
-
-• Record diagnostic observations separately from confidence decisions.
-
-• Allow engineering evidence to mature before promoting measurements
-  into PASS / WARN / FAIL policy.
-
-Warnings should represent conditions that a human operator can
-reasonably investigate.
-
-Diagnostics should provide enough information to inspect the affected
-media directly.
-
-------------------------------------------------------------------------
-
-## Archive Standard
-
-Video
-
-- H.264
-- 1650 kb/s target bitrate
-- One-pass encoding
-- Fast preset
-- Bicubic scaling
-
-Audio
-
-- AAC
-- Stereo
-- 192 kb/s
-
-Subtitles
-
-- Preserve all subtitle streams.
-
-------------------------------------------------------------------------
-
-## Design Principle
-
-Cleaner should eliminate recurring manual work without reducing archive
-confidence.
-
-Confidence always takes priority over speed.
-
-When speed and confidence are equal, prefer the simpler implementation.
-
-------------------------------------------------------------------------
-
-
-## Manual Structure to Build
-
-This manual will eventually contain:
-
-- current interface image
-- accepted controls and their purpose
-- canonical video, audio, subtitle, and container behavior
-- one-pass and two-pass behavior
-- scaling standards and test results
-- verification rules
-- batch and failure behavior
-- source links
-- known limitations
-- active work links back to the [Duty Log](../WoodPile/DutyLog.md)
+---
 
 ## Related Documents
 
 - [Walter Start Here](../WALTER_START_HERE.md)
 - [About the WoodPile](../WoodPile/AboutTheWoodPile.md)
 - [WoodPile Codex](../WoodPile/Codex.md)
+- [Cleaner Engineering Notes](../WoodPile/CleanerDetail.md)
+- [The Wrangler](../Wrangler/Wrangler.md)
 - [Duty Log](../WoodPile/DutyLog.md)
