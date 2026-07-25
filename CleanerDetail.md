@@ -176,3 +176,103 @@ Cleaner should judge second.
 Engineering decisions should be promoted from observation to policy only after repeated evidence demonstrates that they improve archive confidence.
 
 Once a known regression specimen establishes that a condition represents a real playback defect, preserving that detection becomes part of the WoodPile flywheel.
+
+---
+
+## 2026-07-25 --- Feature Discussion (Unresolved): Canonical Media Identification
+
+Status
+
+IN DEVELOPMENT (discussion only)
+
+No implementation has been started. This note exists so the reasoning isnot lost between sessions.
+
+Why this discussion started
+
+Cleaner has become responsible for producing a verified media package.During movie testing it became apparent that future organization willeventually require stronger identity than a filename alone can provide.
+
+The discussion does not change Cleaner's current responsibilities.
+
+Discovery
+
+Two different questions were identified.
+
+Identity
+
+What work is this?
+
+Integrity
+
+Is this copy technically trustworthy?
+
+These should remain separate concepts.
+
+Cleaner currently answers the second question.
+
+Possible Future Direction
+
+A future stage (either within Cleaner or as a separate tool) may consulta canonical movie database to strengthen identification before anyfuture organization.
+
+Useful fields discussed:
+
+Canonical title
+
+Release year
+
+Collection / series
+
+Position within collection
+
+Published runtime
+
+The goal is evidence, not automation.
+
+Runtime
+
+Runtime proved to be more valuable than originally expected.
+
+Observed use cases:
+
+distinguish theatrical vs extended editions
+
+support identification confidence
+
+compare measured runtime against published runtime
+
+Runtime cannot prove file integrity.
+
+Damaged media may still report a believable duration.
+
+Cleaner should continue using runtime as one verification measurement,not the only one.
+
+Confidence Philosophy
+
+Future identification should explain why a match was accepted.
+
+Evidence may include:
+
+title agreement
+
+year agreement
+
+runtime agreement
+
+unique database result
+
+collection agreement
+
+Low-confidence matches should be reviewed rather than automaticallyaccepted.
+
+Related Observation
+
+Many movies already appear to satisfy the current technical standard.
+
+This suggests value in a future read-only collection survey tool thatclassifies media before Cleaner is run.
+
+This remains an observation, not a project decision.
+
+Next Question
+
+Should canonical identification become part of Cleaner, or should itbelong to a future companion tool?
+
+No decision has been made.
