@@ -1,8 +1,8 @@
 """
-TheCleaner.py
+Cleaner.py
 WoodPile Cleaner
-Version: 2.0.2
-Date: 2026-07-22
+Version: 2.2.0
+Date: 2026-07-26
 
 Purpose
 -------
@@ -19,9 +19,11 @@ Current WoodPile defaults
 - no tune
 - bicubic scaling
 - AAC LC stereo, 192 kb/s total, 48 kHz
-- English subtitles retained automatically
+- English embedded subtitles retained automatically
+- matching SRT sidecars included; a single-video Movie folder owns its SRT files
 - ordinary subtitle title absent; SDH title exactly "SDH"
-- source moved to orig only after trustworthy output has been promoted
+- Show and Movie currently share encoding defaults but use distinct file policy
+- source and consumed sidecars move to orig only after trustworthy promotion
 
 Decision record
 ---------------
@@ -52,6 +54,18 @@ Woodchipper rule
 Ordinary oddness should be handled, not debated. Cleaner assumes success,
 continues whenever safe, reports uncertainty honestly, and stops only when
 continuing would violate transaction safety or create an untrustworthy archive.
+
+Known limits
+------------
+- Timestamp continuity checks are structural evidence, not decoded-frame or
+  perceptual proof that every moment is audible and visible.
+- HDR-to-SDR tone mapping is not implemented. HDR sources are encoded through
+  the normal 8-bit H.264 path without a deliberate color-management policy.
+- Sidecar subtitle intake currently supports SRT only.
+- Cleaner selects the first video stream and first audio stream; alternate
+  audio programs and commentary tracks are not preserved.
+- Subtitle count/title mismatches are WARN conditions because a usable output
+  may still exist; they require operator review.
 """
 
 from __future__ import annotations
@@ -70,8 +84,8 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from typing import Any, Iterable
 
-APP_VERSION = "2.0.2"
-APP_DATE = "2026-07-22"
+APP_VERSION = "2.2.0"
+APP_DATE = "2026-07-26"
 
 VIDEO_EXTS = {
     ".mkv", ".mp4", ".avi", ".mov", ".m4v",
@@ -100,7 +114,7 @@ WARN_GAP_SECONDS = 2.0
 FAIL_GAP_SECONDS = 10.0
 AUDIO_WARN_GAP_SECONDS = 2.0
 AUDIO_FAIL_GAP_SECONDS = 10.0
-LOG_NAME = "TheCleaner.log"
+LOG_NAME = "Cleaner.log"
 
 TECH_TOKENS = {
     "480p", "576p", "720p", "1080p", "1080i", "2160p", "4k", "uhd",
@@ -116,10 +130,14 @@ ENGLISH_CODES = {"eng", "en", "english"}
 
 @dataclass
 class SubtitleSelection:
+    # input_index identifies which FFmpeg input owns the subtitle stream.
+    # Embedded subtitles are input 0. Sidecar files are added as later inputs.
+    input_index: int
     source_index: int
     language: str
     is_sdh: bool
     codec_name: str
+    source_path: Path | None = None
 
 
 @dataclass
@@ -170,7 +188,7 @@ class VerificationReport:
 class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title(f"The Cleaner v{APP_VERSION}")
+        self.title(f"Cleaner v{APP_VERSION}")
         self.geometry("1080x780")
         self.minsize(900, 650)
 
@@ -180,12 +198,15 @@ class App(tk.Tk):
         self.stop_requested = False
         self.current_process: subprocess.Popen[str] | None = None
 
+        self.job_type = tk.StringVar(value="Show")
         self.video_bitrate = tk.StringVar(value=str(DEFAULT_VIDEO_BITRATE_KBPS))
         self.pass_mode = tk.StringVar(value="One-pass")
         self.preset = tk.StringVar(value="fast")
         self.tune_label = tk.StringVar(value="Normal / no tune")
         self.scaler_label = tk.StringVar(value="Bicubic")
         self.resolution = tk.StringVar(value="720")
+        self.current_progress = tk.DoubleVar(value=0.0)
+        self.stage_text = tk.StringVar(value="Idle")
 
         self.build_ui()
         self.after(100, self.poll_messages)
@@ -207,6 +228,14 @@ class App(tk.Tk):
 
         row1 = tk.Frame(settings)
         row1.pack(fill="x", padx=8, pady=(6, 3))
+
+        tk.Label(row1, text="Content").pack(side="left", padx=(0, 4))
+        tk.Radiobutton(
+            row1, text="Show", value="Show", variable=self.job_type
+        ).pack(side="left")
+        tk.Radiobutton(
+            row1, text="Movie", value="Movie", variable=self.job_type
+        ).pack(side="left", padx=(0, 18))
 
         tk.Label(row1, text="Average video bitrate").pack(side="left", padx=(0, 4))
         tk.Entry(row1, width=8, textvariable=self.video_bitrate).pack(side="left", padx=(0, 4))
@@ -264,6 +293,16 @@ class App(tk.Tk):
 
         self.status = tk.Label(controls, text="Idle", anchor="w")
         self.status.pack(side="left", padx=12)
+
+        progress_row = tk.Frame(self)
+        progress_row.pack(fill="x", padx=10, pady=(0, 5))
+        tk.Label(
+            progress_row, textvariable=self.stage_text, width=20, anchor="w"
+        ).pack(side="left")
+        self.progress_bar = ttk.Progressbar(
+            progress_row, variable=self.current_progress, maximum=100.0
+        )
+        self.progress_bar.pack(side="left", fill="x", expand=True, padx=(6, 0))
 
         # The split is intentional. The ledger answers "what needs attention?"
         # The tool pane answers "what exactly happened?"
@@ -335,12 +374,19 @@ class App(tk.Tk):
             )
             return
 
+        job_type = self.job_type.get().strip()
         pass_mode = self.pass_mode.get().strip()
         preset = self.preset.get().strip()
         scaler = SCALERS.get(self.scaler_label.get())
         tune = TUNES.get(self.tune_label.get())
 
-        if pass_mode not in PASS_MODES or preset not in PRESETS or scaler is None or tune is None:
+        if (
+            job_type not in ("Show", "Movie")
+            or pass_mode not in PASS_MODES
+            or preset not in PRESETS
+            or scaler is None
+            or tune is None
+        ):
             messagebox.showerror("Invalid settings", "One or more job settings are invalid.")
             return
 
@@ -351,12 +397,13 @@ class App(tk.Tk):
 
         threading.Thread(
             target=self.worker,
-            args=(video_kbps, pass_mode, preset, tune, scaler),
+            args=(job_type, video_kbps, pass_mode, preset, tune, scaler),
             daemon=True,
         ).start()
 
     def worker(
         self,
+        job_type: str,
         video_kbps: int,
         pass_mode: str,
         preset: str,
@@ -370,11 +417,11 @@ class App(tk.Tk):
         try:
             files = self.find_source_files(folder)
             self.write_run_header(
-                logfile, video_kbps, pass_mode, preset, tune, scaler, len(files)
+                logfile, job_type, video_kbps, pass_mode, preset, tune, scaler, len(files)
             )
             self.result(
                 "INFO",
-                f"START  {len(files)} eligible file(s) — "
+                f"START  {job_type} — {len(files)} eligible file(s) — "
                 f"{video_kbps} kb/s, {pass_mode}, {preset}, "
                 f"{self.scaler_label.get()}",
             )
@@ -384,9 +431,11 @@ class App(tk.Tk):
                     self.result("INFO", "STOP  No new file started.")
                     break
 
-                self.set_status(f"{number}/{len(files)}  {infile.name}")
+                self.set_status(f"Job {number} of {len(files)}  {infile.name}")
+                self.set_stage("Starting")
+                self.set_job_progress(0.0)
                 status = self.process_file(
-                    infile, video_kbps, pass_mode, preset, tune, scaler, logfile
+                    infile, job_type, video_kbps, pass_mode, preset, tune, scaler, logfile
                 )
                 if status == "PASS":
                     passed += 1
@@ -407,6 +456,8 @@ class App(tk.Tk):
                 f"FINISH  PASS={passed} WARN={warned} FAIL={failed} SKIP={skipped}",
             )
             self.set_status("Idle")
+            self.set_stage("Idle")
+            self.set_job_progress(0.0)
             self.msg_q.put(("running", "false"))
             self.detail("Run finished.", logfile)
 
@@ -417,6 +468,7 @@ class App(tk.Tk):
     def process_file(
         self,
         infile: Path,
+        job_type: str,
         video_kbps: int,
         pass_mode: str,
         preset: str,
@@ -425,6 +477,7 @@ class App(tk.Tk):
         logfile: Path,
     ) -> str:
         started = time.monotonic()
+        timings: list[tuple[str, float]] = []
         final_name = self.clean_filename_autoit_style(infile)
         final_path = infile.with_name(final_name)
         temp_encode = infile.with_name(f".__CLEANER_ENCODE__{infile.stem}.mkv")
@@ -444,16 +497,38 @@ class App(tk.Tk):
         self.remove_if_exists(temp_mux)
         self.remove_passlog_files(passlog)
 
-        source_moved = False
-        orig_path: Path | None = None
+        # Every file moved by the transaction is recorded so a failed
+        # promotion can restore the video and all consumed subtitle sidecars.
+        moved_items: list[tuple[Path, Path]] = []
+        sidecar_paths: list[Path] = []
 
         try:
+            self.set_stage("Inspect")
+            phase_started = time.monotonic()
             source_probe = self.probe_file(infile)
             source = self.source_info(source_probe)
-            self.log_source_summary(source_probe, source, logfile)
 
+            sidecar_paths = self.find_sidecar_subtitles(infile, job_type)
+            for input_index, sidecar in enumerate(sidecar_paths, start=1):
+                source.subtitles.append(SubtitleSelection(
+                    input_index=input_index,
+                    source_index=0,
+                    language="eng",
+                    is_sdh=self.is_sdh_sidecar(sidecar),
+                    codec_name="subrip",
+                    source_path=sidecar,
+                ))
+
+            self.log_source_summary(source_probe, source, logfile)
+            self.log_sidecar_summary(infile, job_type, sidecar_paths, logfile)
+            self.finish_phase("Inspect", phase_started, timings, logfile)
+
+            self.set_stage("Source continuity")
+            phase_started = time.monotonic()
             source_video = self.scan_continuity(infile, "v:0", logfile)
             source_audio = self.scan_continuity(infile, "a:0", logfile)
+            self.finish_phase("Source continuity", phase_started, timings, logfile)
+
             source_flags = self.classify_continuity(source_video, "source video")
             source_flags += self.classify_continuity(source_audio, "source audio")
             for severity, reason in source_flags:
@@ -467,7 +542,8 @@ class App(tk.Tk):
                 reason for severity, reason in source_flags if severity == "FAIL"
             ]
             if fatal_source_findings:
-                elapsed = self.format_duration(time.monotonic() - started)
+                elapsed_seconds = time.monotonic() - started
+                elapsed = self.format_duration(elapsed_seconds)
                 reason = fatal_source_findings[0]
                 extra = (
                     f" (+{len(fatal_source_findings) - 1} more)"
@@ -482,6 +558,7 @@ class App(tk.Tk):
                     "No encode was started; source left untouched.",
                     logfile,
                 )
+                self.log_timing_summary(timings, elapsed_seconds, logfile)
                 return "FAIL"
 
             self.detail(
@@ -492,29 +569,55 @@ class App(tk.Tk):
             )
 
             if pass_mode == "Two-pass":
+                self.set_stage("Encode pass 1")
+                self.set_job_progress(0.0)
+                phase_started = time.monotonic()
                 first_pass_cmd = self.build_ffmpeg_first_pass_command(
                     infile, video_kbps, preset, tune, scaler, passlog
                 )
-                self.run_checked(first_pass_cmd, logfile, "FFMPEG PASS 1")
+                self.run_checked(
+                    first_pass_cmd,
+                    logfile,
+                    "FFMPEG PASS 1",
+                    progress_duration=source.duration,
+                )
+                self.finish_phase("Encode pass 1", phase_started, timings, logfile)
 
+            self.set_stage("Encode pass 2" if pass_mode == "Two-pass" else "Encode")
+            self.set_job_progress(0.0)
+            phase_started = time.monotonic()
             encode_cmd = self.build_ffmpeg_command(
-                infile, temp_encode, source, video_kbps,
+                infile, temp_encode, source, sidecar_paths, video_kbps,
                 preset, tune, scaler, pass_mode, passlog,
             )
             self.run_checked(
-                encode_cmd, logfile,
+                encode_cmd,
+                logfile,
                 "FFMPEG PASS 2" if pass_mode == "Two-pass" else "FFMPEG",
+                progress_duration=source.duration,
             )
+            self.finish_phase(
+                "Encode pass 2" if pass_mode == "Two-pass" else "Encode",
+                phase_started,
+                timings,
+                logfile,
+            )
+            self.set_job_progress(100.0)
             self.remove_passlog_files(passlog)
 
             if not temp_encode.exists() or temp_encode.stat().st_size == 0:
                 raise RuntimeError("FFmpeg did not create a usable temporary output.")
 
+            self.set_stage("Mux")
+            phase_started = time.monotonic()
             mux_cmd = self.build_mkvmerge_command(temp_encode, temp_mux, source)
             mux_code = self.run_live_command(mux_cmd, logfile, "MKVMERGE")
+            self.finish_phase("Mux", phase_started, timings, logfile)
             if mux_code not in (0, 1):
                 raise RuntimeError(f"mkvmerge returned code {mux_code}.")
 
+            self.set_stage("Verify")
+            phase_started = time.monotonic()
             report = self.verify_final(
                 source=source,
                 source_video=source_video,
@@ -522,6 +625,7 @@ class App(tk.Tk):
                 outfile=temp_mux,
                 logfile=logfile,
             )
+            self.finish_phase("Verify", phase_started, timings, logfile)
             if report.status == "FAIL":
                 raise RuntimeError("; ".join(report.reasons))
 
@@ -529,27 +633,35 @@ class App(tk.Tk):
             #
             # The source may already have the intended final filename. Promoting
             # over that path first would destroy the original. Therefore the
-            # verified source is moved to orig, then the final is promoted. If
-            # promotion fails, the source is restored immediately.
+            # verified source and consumed sidecars are moved to orig, then the
+            # final is promoted. If promotion fails, every moved item is restored.
+            self.set_stage("Promote")
+            phase_started = time.monotonic()
             orig_dir = infile.parent / "orig"
             orig_dir.mkdir(exist_ok=True)
-            orig_path = self.unique_orig_path(orig_dir / infile.name)
-            shutil.move(str(infile), str(orig_path))
-            source_moved = True
-            self.detail(f"ORIGINAL MOVED: {orig_path}", logfile)
+
+            # The video and only the sidecars actually consumed by this job move
+            # as one transaction. Unrelated files in the folder are untouched.
+            for original in [infile, *sidecar_paths]:
+                archived = self.unique_orig_path(orig_dir / original.name)
+                shutil.move(str(original), str(archived))
+                moved_items.append((original, archived))
+                label = "ORIGINAL" if original == infile else "SIDECAR"
+                self.detail(f"{label} MOVED: {archived}", logfile)
 
             try:
                 temp_mux.replace(final_path)
                 self.detail(f"FINAL PROMOTED: {final_path}", logfile)
             except Exception:
-                if orig_path.exists() and not infile.exists():
-                    shutil.move(str(orig_path), str(infile))
-                    source_moved = False
-                    self.detail("ROLLBACK: original restored after promotion failure.", logfile)
+                self.restore_moved_items(moved_items, logfile)
+                moved_items.clear()
                 raise
 
+            self.finish_phase("Promote", phase_started, timings, logfile)
             self.remove_if_exists(temp_encode)
-            elapsed = self.format_duration(time.monotonic() - started)
+            elapsed_seconds = time.monotonic() - started
+            elapsed = self.format_duration(elapsed_seconds)
+            self.log_timing_summary(timings, elapsed_seconds, logfile)
 
             reason = report.reasons[0] if report.reasons else "all required checks passed"
             extra = f" (+{len(report.reasons)-1} more)" if len(report.reasons) > 1 else ""
@@ -562,21 +674,23 @@ class App(tk.Tk):
 
         except Exception as exc:
             # Roll back only what Cleaner itself changed.
-            if source_moved and orig_path and orig_path.exists() and not infile.exists():
-                try:
-                    shutil.move(str(orig_path), str(infile))
-                    self.detail("ROLLBACK: original restored to working folder.", logfile)
-                except OSError as rollback_exc:
-                    self.detail(f"ROLLBACK FAILED: {rollback_exc}", logfile)
+            if moved_items:
+                self.restore_moved_items(moved_items, logfile)
+                moved_items.clear()
 
             self.remove_if_exists(temp_encode)
             self.remove_if_exists(temp_mux)
             self.remove_passlog_files(passlog)
 
-            elapsed = self.format_duration(time.monotonic() - started)
+            elapsed_seconds = time.monotonic() - started
+            elapsed = self.format_duration(elapsed_seconds)
             self.result("FAIL", f"FAIL  {infile.name} — {type(exc).__name__}: {exc} — {elapsed}")
             self.detail(f"FAILED: {type(exc).__name__}: {exc}", logfile)
-            self.detail("Source preserved; incomplete temporary files removed.", logfile)
+            self.detail(
+                "Source and consumed sidecars preserved; incomplete temporary files removed.",
+                logfile,
+            )
+            self.log_timing_summary(timings, elapsed_seconds, logfile)
             return "FAIL"
 
     # ------------------------------------------------------------------
@@ -612,6 +726,7 @@ class App(tk.Tk):
         infile: Path,
         outfile: Path,
         source: SourceInfo,
+        sidecar_paths: list[Path],
         video_bitrate_kbps: int,
         preset: str,
         tune: str,
@@ -623,12 +738,17 @@ class App(tk.Tk):
             self.resolve_tool("ffmpeg") or "ffmpeg",
             "-y", "-hide_banner", "-loglevel", "info", "-stats",
             "-i", str(infile),
+        ]
+        for sidecar in sidecar_paths:
+            cmd += ["-i", str(sidecar)]
+
+        cmd += [
             "-map", "0:v:0",
             "-map", "0:a:0",
         ]
 
         for subtitle in source.subtitles:
-            cmd += ["-map", f"0:{subtitle.source_index}"]
+            cmd += ["-map", f"{subtitle.input_index}:{subtitle.source_index}"]
 
         cmd += ["-map", "0:t?", "-map_metadata", "-1", "-map_chapters", "0"]
         cmd += self.build_video_options(
@@ -1053,6 +1173,7 @@ class App(tk.Tk):
                 marker in title.lower() for marker in SDH_MARKERS
             )
             subtitles.append(SubtitleSelection(
+                input_index=0,
                 source_index=int(stream["index"]),
                 language="eng",
                 is_sdh=is_sdh,
@@ -1103,12 +1224,26 @@ class App(tk.Tk):
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"Could not parse mkvmerge JSON: {exc}") from exc
 
-    def run_checked(self, cmd: list[str], logfile: Path, phase: str) -> None:
-        code = self.run_live_command(cmd, logfile, phase)
+    def run_checked(
+        self,
+        cmd: list[str],
+        logfile: Path,
+        phase: str,
+        progress_duration: float | None = None,
+    ) -> None:
+        code = self.run_live_command(
+            cmd, logfile, phase, progress_duration=progress_duration
+        )
         if code != 0:
             raise RuntimeError(f"{phase} returned code {code}")
 
-    def run_live_command(self, cmd: list[str], logfile: Path, phase: str) -> int:
+    def run_live_command(
+        self,
+        cmd: list[str],
+        logfile: Path,
+        phase: str,
+        progress_duration: float | None = None,
+    ) -> int:
         self.detail(f"\n{phase} COMMAND:\n{self.command_text(cmd)}", logfile)
         process = subprocess.Popen(
             cmd,
@@ -1126,6 +1261,14 @@ class App(tk.Tk):
             clean = line.rstrip()
             if clean:
                 self.detail(f"[{phase}] {clean}", logfile)
+                if progress_duration and progress_duration > 0:
+                    encoded_seconds = self.ffmpeg_time_seconds(clean)
+                    if encoded_seconds is not None:
+                        percent = min(
+                            100.0,
+                            max(0.0, encoded_seconds / progress_duration * 100.0),
+                        )
+                        self.set_job_progress(percent)
         code = process.wait()
         self.current_process = None
         return code
@@ -1182,6 +1325,7 @@ class App(tk.Tk):
     def write_run_header(
         self,
         logfile: Path,
+        job_type: str,
         video_kbps: int,
         pass_mode: str,
         preset: str,
@@ -1191,7 +1335,8 @@ class App(tk.Tk):
     ) -> None:
         self.detail("\n" + "#" * 90, logfile)
         self.detail(
-            f"The Cleaner v{APP_VERSION} ({APP_DATE})\n"
+            f"Cleaner v{APP_VERSION} ({APP_DATE})\n"
+            f"Content={job_type}\n"
             f"Video={video_kbps} kb/s; mode={pass_mode}; preset={preset}; "
             f"tune={tune or 'none'}; scaler={self.scaler_label.get()}; "
             f"resolution={self.resolution.get()}\n"
@@ -1199,6 +1344,119 @@ class App(tk.Tk):
             f"Eligible files={count}",
             logfile,
         )
+
+    def find_sidecar_subtitles(self, infile: Path, job_type: str) -> list[Path]:
+        """Return only subtitle sidecars that belong to this video.
+
+        Show mode is deliberately conservative: a sidecar must begin with the
+        video's complete stem after punctuation is normalized.
+
+        Movie mode uses the same rule. In addition, when the directory contains
+        exactly one eligible video, every SRT in that directory belongs to that
+        movie package. This covers curated movie folders where the subtitle was
+        delivered as simply "English.srt", "SDH.srt", or another standalone
+        filename rather than repeating the movie name.
+        """
+        candidates = sorted(
+            (
+                path for path in infile.parent.iterdir()
+                if path.is_file()
+                and path.suffix.lower() == ".srt"
+                and not path.name.startswith(".__CLEANER_")
+            ),
+            key=lambda path: path.name.lower(),
+        )
+        if not candidates:
+            return []
+
+        video_key = self.normalized_stem(infile.stem)
+        matched = [
+            sidecar for sidecar in candidates
+            if self.sidecar_matches_video(sidecar, video_key)
+        ]
+
+        eligible_videos = [
+            path for path in infile.parent.iterdir()
+            if path.is_file()
+            and path.suffix.lower() in VIDEO_EXTS
+            and not path.name.startswith(".__CLEANER_")
+        ]
+        if job_type == "Movie" and len(eligible_videos) == 1:
+            matched = candidates
+
+        # Preserve directory order while preventing accidental duplicates.
+        return list(dict.fromkeys(matched))
+
+    @staticmethod
+    def normalized_stem(value: str) -> str:
+        value = re.sub(r"[\[\](){}._-]+", " ", value)
+        return re.sub(r"\s+", " ", value).strip().lower()
+
+    @classmethod
+    def sidecar_matches_video(cls, sidecar: Path, video_key: str) -> bool:
+        sidecar_key = cls.normalized_stem(sidecar.stem)
+        if sidecar_key == video_key:
+            return True
+        return sidecar_key.startswith(video_key + " ")
+
+    @staticmethod
+    def is_sdh_sidecar(sidecar: Path) -> bool:
+        # "cc" must be treated as a token. A raw substring check would wrongly
+        # classify ordinary names such as "Rebecca" as closed captions.
+        normalized = App.normalized_stem(sidecar.stem)
+        tokens = set(normalized.split())
+        return (
+            "sdh" in tokens
+            or "hoh" in tokens
+            or "cc" in tokens
+            or "hearing impaired" in normalized
+            or "hearing-impaired" in sidecar.stem.lower()
+        )
+
+    def log_sidecar_summary(
+        self,
+        infile: Path,
+        job_type: str,
+        sidecars: list[Path],
+        logfile: Path,
+    ) -> None:
+        all_srt = sorted(
+            (
+                path for path in infile.parent.iterdir()
+                if path.is_file() and path.suffix.lower() == ".srt"
+            ),
+            key=lambda path: path.name.lower(),
+        )
+        selected = set(sidecars)
+        self.detail(
+            f"SIDECAR POLICY: {job_type}; "
+            f"selected={len(sidecars)}; ignored={len(all_srt) - len(sidecars)}",
+            logfile,
+        )
+        for sidecar in all_srt:
+            if sidecar in selected:
+                kind = "SDH" if self.is_sdh_sidecar(sidecar) else "ordinary"
+                self.detail(f"  SIDECAR SELECTED ({kind}): {sidecar.name}", logfile)
+            else:
+                self.detail(f"  SIDECAR IGNORED: {sidecar.name}", logfile)
+
+    def restore_moved_items(
+        self,
+        moved_items: list[tuple[Path, Path]],
+        logfile: Path,
+    ) -> None:
+        # Restore in reverse order so the transaction unwinds cleanly.
+        for original, archived in reversed(moved_items):
+            if not archived.exists() or original.exists():
+                continue
+            try:
+                shutil.move(str(archived), str(original))
+                self.detail(f"ROLLBACK RESTORED: {original}", logfile)
+            except OSError as rollback_exc:
+                self.detail(
+                    f"ROLLBACK FAILED for {original.name}: {rollback_exc}",
+                    logfile,
+                )
 
     # ------------------------------------------------------------------
     # Messaging
@@ -1219,6 +1477,12 @@ class App(tk.Tk):
     def set_status(self, message: str) -> None:
         self.msg_q.put(("status", message))
 
+    def set_stage(self, message: str) -> None:
+        self.msg_q.put(("stage", message))
+
+    def set_job_progress(self, percent: float) -> None:
+        self.msg_q.put(("progress", f"{percent:.3f}"))
+
     def poll_messages(self) -> None:
         try:
             while True:
@@ -1232,6 +1496,13 @@ class App(tk.Tk):
                     self.log.see("end")
                 elif kind == "status":
                     self.status.config(text=message)
+                elif kind == "stage":
+                    self.stage_text.set(message)
+                elif kind == "progress":
+                    try:
+                        self.current_progress.set(float(message))
+                    except ValueError:
+                        pass
                 elif kind == "running":
                     self.running = False
                     self.start_button.config(state="normal")
@@ -1239,6 +1510,66 @@ class App(tk.Tk):
         except queue.Empty:
             pass
         self.after(100, self.poll_messages)
+
+    # ------------------------------------------------------------------
+    # Performance evidence
+    # ------------------------------------------------------------------
+
+    def finish_phase(
+        self,
+        label: str,
+        started: float,
+        timings: list[tuple[str, float]],
+        logfile: Path,
+    ) -> None:
+        elapsed = time.monotonic() - started
+        timings.append((label, elapsed))
+        self.detail(f"TIMING {label}: {elapsed:.3f}s", logfile)
+
+    def log_timing_summary(
+        self,
+        timings: list[tuple[str, float]],
+        total_seconds: float,
+        logfile: Path,
+    ) -> None:
+        measured = sum(seconds for _, seconds in timings)
+        self.detail("\nPERFORMANCE SUMMARY:", logfile)
+        for label, seconds in timings:
+            share = (seconds / total_seconds * 100.0) if total_seconds > 0 else 0.0
+            self.detail(
+                f"  {label:<20} {self.format_duration_precise(seconds):>12}  "
+                f"{share:6.1f}%",
+                logfile,
+            )
+        unclassified = max(0.0, total_seconds - measured)
+        if unclassified >= 0.05:
+            share = unclassified / total_seconds * 100.0 if total_seconds > 0 else 0.0
+            self.detail(
+                f"  {'Other / wrapper':<20} "
+                f"{self.format_duration_precise(unclassified):>12}  {share:6.1f}%",
+                logfile,
+            )
+        self.detail(
+            f"  {'TOTAL':<20} {self.format_duration_precise(total_seconds):>12}  100.0%",
+            logfile,
+        )
+
+    @staticmethod
+    def ffmpeg_time_seconds(line: str) -> float | None:
+        match = re.search(r"\btime=(\d+):(\d+):(\d+(?:\.\d+)?)", line)
+        if not match:
+            return None
+        hours = int(match.group(1))
+        minutes = int(match.group(2))
+        seconds = float(match.group(3))
+        return hours * 3600 + minutes * 60 + seconds
+
+    @staticmethod
+    def format_duration_precise(seconds: float) -> str:
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        remainder = seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{remainder:06.3f}"
 
     # ------------------------------------------------------------------
     # Static utilities
